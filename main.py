@@ -3,12 +3,13 @@ import telebot
 import threading
 import time
 import logging
+import random
 from flask import Flask, request
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# 토큰 & 채널 로드
+# 토큰 & 채널
 tokens = {
     'WATCHER': os.getenv('WATCHER_TOKEN'),
     'ADVISOR': os.getenv('ENGINE_TOKEN'),
@@ -18,17 +19,25 @@ tokens = {
 bots = {}
 for name, token in tokens.items():
     if token:
-        bots[name] = teleBot = telebot.TeleBot(token)
-        logging.info(f"{name} 연결 OK")
+        bots[name] = telebot.TeleBot(token)
 
 CHANNEL_ID = int(os.getenv('CHANNEL_ID', '0'))
+WALLET = '0x7cd253043254d97a732b403d54d6366bf9636194'
 
-# 무료 풀 콘텐츠 파일 (Railway에 업로드 필수)
-GOOD_FREE_IMAGES = ['good_sample1.jpg', 'good_sample2.jpg', 'good_sample3.jpg']  # 고퀄 3장
-FREE_PACK_ZIP = 'good_free_pack.zip'  # 첫판용 풀팩 ZIP (10장 이상, 크기 50MB 이하)
-
-# 랭킹 (초기 빈 상태)
 ranking = {}
+
+# 야한 텍스트 베이스 (봇이 조합해서 변형)
+base_parts = [
+    "그녀의", "부드러운", "촉촉한", "헐떡이는", "숨결이", "피부가", "빛나는", "가슴골이", "깊게", "패인", "허벅지 사이로", "스며드는", "손길", "신음소리가", "새어나오는", "입술이", "살짝", "벌어지며", "속삭이는", "더 해줘", "S라인", "몸매가", "천천히", "움직일 때마다", "시선이", "집중되는", "그 순간", "야한 포즈로", "누워서", "카메라를", "바라보는", "눈빛", "위험한", "수준이야", "온몸이", "달아오르는", "느낌", "끝없이", "이어지는", "쾌감"
+]
+
+def generate_erotic_text():
+    # 랜덤으로 8~12개 조각 골라서 연결
+    parts = random.sample(base_parts, random.randint(8, 12))
+    text = ' '.join(parts)
+    # 자연스럽게 마무리
+    endings = ["... 상상만 해도 미치겠네 🔥", "... 이 맛에 사는 거지", "... 계속 보고 싶지?", "... 더 강한 거 원하면 입금 ㄱㄱ"]
+    return text + random.choice(endings)
 
 @app.route('/webhook/<name>', methods=['POST'])
 def webhook(name):
@@ -45,69 +54,47 @@ def webhook(name):
         logging.error(f"Webhook error: {e}")
         return '', 500
 
-# /start 시 첫판 풀어주기 + 유료 유도
 def add_handlers():
     for name, bot in bots.items():
         @bot.message_handler(commands=['start'])
         def start(m):
-            msg = (
-                "BD_ONE 역설방 첫판 풀 오픈!\n\n"
-                "지금부터 진짜 좋은 거 무료로 풀어줄게 🔥\n"
-                "고퀄 AI 선정적 이미지 팩 첫 세트 도착\n"
-                "계속 보려면? 0.01 ETH 입금 → 풀버전 + 매일 신규 업데이트 독점\n"
-                "입금 주소: 0x7cd253043254d97a732b403d54d6366bf9636194\n"
-                "첫 입금자 = 영구 1위 + 보너스 팩 증정!"
+            welcome = (
+                f"BD_ONE 역설방 완전 무료 오픈!\n\n"
+                f"봇이 5분마다 알아서 야한 텍스트 풀어줌\n"
+                f"지금부터 계속 즐겨도 됨 🔥\n"
+                f"더 강렬하고 상세한 버전 + 매일 신규 콘텐츠 원하면 0.01 ETH 입금\n"
+                f"주소: {WALLET}\n"
+                f"첫 입금자 = 영구 1위 + 무제한 풀버전"
             )
-            bot.reply_to(m, msg)
+            bot.reply_to(m, welcome)
+            # 첫 콘텐츠 바로 풀기
+            bot.reply_to(m, generate_erotic_text())
 
-            # 첫판 무료 풀 사출 (사진 여러 장)
-            for img in GOOD_FREE_IMAGES:
-                if os.path.exists(img):
-                    with open(img, 'rb') as f:
-                        bot.send_photo(m.chat.id, f, caption="첫판 무료 풀: 고퀄 AI 샘플")
-
-            # 무료 팩 ZIP도 바로 보내기
-            if os.path.exists(FREE_PACK_ZIP):
-                with open(FREE_PACK_ZIP, 'rb') as f:
-                    bot.send_document(m.chat.id, f, caption="첫판 풀팩 다운로드 (10장+)")
-
-# 자동 풀 루프 (5분마다 채널에 좋은 거 풀기)
-def auto_free_full():
-    count = 0
+def auto_erotic_loop():
     while True:
         time.sleep(300)  # 5분
-        count += 1
         try:
             if CHANNEL_ID == 0 or 'WATCHER' not in bots:
                 continue
 
-            # 랭킹 표 + 유료 유도 문구
+            # 랭킹
             sorted_r = sorted(ranking.items(), key=lambda x: x[1], reverse=True)
-            table = f"📊 BD_ONE 랭킹 (무료 체험 중 {count}회차)\n"
+            table = "📊 BD_ONE 랭킹 (자동 업데이트)\n"
             if not sorted_r:
-                table += "아직 입금자 없음! 첫 입금자가 영구 1위 + 보너스 🔥\n"
+                table += "아직 입금자 없음! 첫 번째가 영구 1위 🔥\n"
             else:
                 for i, (a, am) in enumerate(sorted_r[:3], 1):
                     table += f"{i}위: {a[:6]}...{a[-4:]} | {am:.4f} ETH\n"
-            
-            table += "\n첫판부터 좋은 거 풀었지? 계속 보려면 0.01 ETH 입금 ㄱㄱ\n매일 신규 고퀄 업데이트 + 독점 풀버전 자동 사출!\n주소: 0x7cd253043254d97a732b403d54d6366bf9636194"
+
+            table += f"\n봇이 알아서 야한 텍스트 풀 중! 더 강한 버전 보려면 0.01 ETH 입금 ㄱㄱ\n주소: {WALLET}"
 
             bots['WATCHER'].send_message(CHANNEL_ID, table)
+            bots['WATCHER'].send_message(CHANNEL_ID, generate_erotic_text())
 
-            # 좋은 거 무료 풀 (사진 + ZIP 번갈아)
-            if count % 2 == 0 and os.path.exists(FREE_PACK_ZIP):
-                with open(FREE_PACK_ZIP, 'rb') as f:
-                    bots['WATCHER'].send_document(CHANNEL_ID, f, caption=f"{count}회차 무료 풀팩 (고퀄 업데이트)")
-            else:
-                for img in GOOD_FREE_IMAGES[:2]:  # 2장만
-                    if os.path.exists(img):
-                        with open(img, 'rb') as f:
-                            bots['WATCHER'].send_photo(CHANNEL_ID, f, caption=f"{count}회차 무료 고퀄 샘플")
-
-            logging.info(f"무료 풀 {count}회 완료")
+            logging.info("야한 텍스트 자동 사출 완료")
 
         except Exception as e:
-            logging.error(f"Auto free error: {e}")
+            logging.error(f"Loop error: {e}")
 
 if __name__ == '__main__':
     add_handlers()
@@ -119,11 +106,11 @@ if __name__ == '__main__':
             try:
                 bots[name].remove_webhook()
                 bots[name].set_webhook(url=url)
-                logging.info(f"{name} webhook OK")
+                logging.info(f"{name} webhook 설정")
             except Exception as e:
                 logging.error(f"{name} webhook 실패: {e}")
 
-    threading.Thread(target=auto_free_full, daemon=True).start()
+    threading.Thread(target=auto_erotic_loop, daemon=True).start()
 
     PORT = int(os.getenv('PORT', 8080))
     app.run(host='0.0.0.0', port=PORT)
