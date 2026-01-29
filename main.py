@@ -3,20 +3,12 @@ import telebot
 import threading
 import time
 import logging
-from web3 import Web3
 from flask import Flask, request
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# Env 로드
-INFURA_URL = os.getenv('INFURA_URL')
-if not INFURA_URL:
-    raise ValueError("INFURA_URL 없음")
-
-w3 = Web3(Web3.HTTPProvider(INFURA_URL))
-WALLET = '0x7cd253043254d97a732b403d54d6366bf9636194'.lower()
-
+# 토큰 & 채널 로드
 tokens = {
     'WATCHER': os.getenv('WATCHER_TOKEN'),
     'ADVISOR': os.getenv('ENGINE_TOKEN'),
@@ -26,12 +18,17 @@ tokens = {
 bots = {}
 for name, token in tokens.items():
     if token:
-        bots[name] = telebot.TeleBot(token)
+        bots[name] = teleBot = telebot.TeleBot(token)
+        logging.info(f"{name} 연결 OK")
 
-CHANNEL_ID = int(os.getenv('CHANNEL_ID', '0'))  # -100xxxxxx 형태
-FILE_PATH = 'ai_hentai_pack.zip'  # Railway에 업로드한 파일명
+CHANNEL_ID = int(os.getenv('CHANNEL_ID', '0'))
 
-ranking = {}  # {addr: total_eth}
+# 무료 풀 콘텐츠 파일 (Railway에 업로드 필수)
+GOOD_FREE_IMAGES = ['good_sample1.jpg', 'good_sample2.jpg', 'good_sample3.jpg']  # 고퀄 3장
+FREE_PACK_ZIP = 'good_free_pack.zip'  # 첫판용 풀팩 ZIP (10장 이상, 크기 50MB 이하)
+
+# 랭킹 (초기 빈 상태)
+ranking = {}
 
 @app.route('/webhook/<name>', methods=['POST'])
 def webhook(name):
@@ -45,75 +42,88 @@ def webhook(name):
             bot.process_new_updates([update])
         return '', 200
     except Exception as e:
-        logging.error(f"Webhook error {name}: {e}")
+        logging.error(f"Webhook error: {e}")
         return '', 500
 
-def monitor_wallet():
-    prev_bal = w3.eth.get_balance(WALLET)
-    logging.info(f"Start balance: {w3.from_wei(prev_bal, 'ether')} ETH")
+# /start 시 첫판 풀어주기 + 유료 유도
+def add_handlers():
+    for name, bot in bots.items():
+        @bot.message_handler(commands=['start'])
+        def start(m):
+            msg = (
+                "BD_ONE 역설방 첫판 풀 오픈!\n\n"
+                "지금부터 진짜 좋은 거 무료로 풀어줄게 🔥\n"
+                "고퀄 AI 선정적 이미지 팩 첫 세트 도착\n"
+                "계속 보려면? 0.01 ETH 입금 → 풀버전 + 매일 신규 업데이트 독점\n"
+                "입금 주소: 0x7cd253043254d97a732b403d54d6366bf9636194\n"
+                "첫 입금자 = 영구 1위 + 보너스 팩 증정!"
+            )
+            bot.reply_to(m, msg)
 
+            # 첫판 무료 풀 사출 (사진 여러 장)
+            for img in GOOD_FREE_IMAGES:
+                if os.path.exists(img):
+                    with open(img, 'rb') as f:
+                        bot.send_photo(m.chat.id, f, caption="첫판 무료 풀: 고퀄 AI 샘플")
+
+            # 무료 팩 ZIP도 바로 보내기
+            if os.path.exists(FREE_PACK_ZIP):
+                with open(FREE_PACK_ZIP, 'rb') as f:
+                    bot.send_document(m.chat.id, f, caption="첫판 풀팩 다운로드 (10장+)")
+
+# 자동 풀 루프 (5분마다 채널에 좋은 거 풀기)
+def auto_free_full():
+    count = 0
     while True:
+        time.sleep(300)  # 5분
+        count += 1
         try:
-            time.sleep(30)  # 30초로 늘려 rate limit 피함
-            curr_bal = w3.eth.get_balance(WALLET)
-            if curr_bal <= prev_bal:
+            if CHANNEL_ID == 0 or 'WATCHER' not in bots:
                 continue
 
-            delta = curr_bal - prev_bal
-            logging.info(f"Deposit detected: +{w3.from_wei(delta, 'ether')} ETH")
+            # 랭킹 표 + 유료 유도 문구
+            sorted_r = sorted(ranking.items(), key=lambda x: x[1], reverse=True)
+            table = f"📊 BD_ONE 랭킹 (무료 체험 중 {count}회차)\n"
+            if not sorted_r:
+                table += "아직 입금자 없음! 첫 입금자가 영구 1위 + 보너스 🔥\n"
+            else:
+                for i, (a, am) in enumerate(sorted_r[:3], 1):
+                    table += f"{i}위: {a[:6]}...{a[-4:]} | {am:.4f} ETH\n"
+            
+            table += "\n첫판부터 좋은 거 풀었지? 계속 보려면 0.01 ETH 입금 ㄱㄱ\n매일 신규 고퀄 업데이트 + 독점 풀버전 자동 사출!\n주소: 0x7cd253043254d97a732b403d54d6366bf9636194"
 
-            # 최근 tx에서 입금자 찾기 (최적화: 전체 블록 안 돌림)
-            block = w3.eth.get_block('latest', full_transactions=True)
-            updated = False
-            for tx in block.transactions:
-                if tx.get('to') and tx['to'].lower() == WALLET and tx['value'] > 0:
-                    addr = tx['from'].lower()
-                    amt = float(w3.from_wei(tx['value'], 'ether'))
-                    ranking[addr] = ranking.get(addr, 0) + amt
-                    updated = True
+            bots['WATCHER'].send_message(CHANNEL_ID, table)
 
-            if updated:
-                prev_bal = curr_bal
-                # 랭킹 표
-                sorted_r = sorted(ranking.items(), key=lambda x: x[1], reverse=True)
-                table = "📊 SOVEREIGN 엑셀 랭킹 (최신)\n" + "\n".join(
-                    f"{i+1}위: {a[:6]}...{a[-4:]} | {am:.4f} ETH"
-                    for i, (a, am) in enumerate(sorted_r[:5])
-                )
+            # 좋은 거 무료 풀 (사진 + ZIP 번갈아)
+            if count % 2 == 0 and os.path.exists(FREE_PACK_ZIP):
+                with open(FREE_PACK_ZIP, 'rb') as f:
+                    bots['WATCHER'].send_document(CHANNEL_ID, f, caption=f"{count}회차 무료 풀팩 (고퀄 업데이트)")
+            else:
+                for img in GOOD_FREE_IMAGES[:2]:  # 2장만
+                    if os.path.exists(img):
+                        with open(img, 'rb') as f:
+                            bots['WATCHER'].send_photo(CHANNEL_ID, f, caption=f"{count}회차 무료 고퀄 샘플")
 
-                if 'WATCHER' in bots and CHANNEL_ID != 0:
-                    bots['WATCHER'].send_message(CHANNEL_ID, table)
-
-                # 현재 1위한테 매번 혜택 사출 (중복 OK, 형님이 원하는 대로)
-                if sorted_r and 'ENFORCER' in bots and CHANNEL_ID != 0:
-                    top_addr = sorted_r[0][0]
-                    if os.path.exists(FILE_PATH):
-                        with open(FILE_PATH, 'rb') as f:
-                            bots['ENFORCER'].send_document(
-                                CHANNEL_ID,
-                                f,
-                                caption=f"현재 1위 ({top_addr[:6]}...) 보상 재사출 🔥 AI 팩 도착!"
-                            )
-                    else:
-                        logging.warning("파일 없음: 혜택 스킵")
+            logging.info(f"무료 풀 {count}회 완료")
 
         except Exception as e:
-            logging.error(f"Monitor error: {e}")
-            time.sleep(60)
+            logging.error(f"Auto free error: {e}")
 
 if __name__ == '__main__':
-    PORT = int(os.getenv('PORT', 8080))
-    DOMAIN = os.getenv('RAILWAY_PUBLIC_DOMAIN')
+    add_handlers()
 
+    DOMAIN = os.getenv('RAILWAY_PUBLIC_DOMAIN')
     if DOMAIN:
         for name in bots:
             url = f"https://{DOMAIN}/webhook/{name.lower()}"
             try:
                 bots[name].remove_webhook()
                 bots[name].set_webhook(url=url)
-                logging.info(f"{name} webhook set: {url}")
+                logging.info(f"{name} webhook OK")
             except Exception as e:
-                logging.error(f"{name} webhook fail: {e}")
+                logging.error(f"{name} webhook 실패: {e}")
 
-    threading.Thread(target=monitor_wallet, daemon=True).start()
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+    threading.Thread(target=auto_free_full, daemon=True).start()
+
+    PORT = int(os.getenv('PORT', 8080))
+    app.run(host='0.0.0.0', port=PORT)
