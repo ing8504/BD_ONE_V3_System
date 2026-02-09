@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVRN OS - BD-ONE V3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #000; color: #fff; margin: 0; overflow: hidden; font-family: sans-serif; }
+        .glitch-text { text-shadow: 2px 0 #fbbf24, -2px 0 #10b981; animation: glitch 1s infinite; }
+        @keyframes glitch {
+            0% { transform: translate(0) }
+            20% { transform: translate(-2px, 2px) }
+            40% { transform: translate(-2px, -2px) }
+            60% { transform: translate(2px, 2px) }
+            80% { transform: translate(2px, -2px) }
+            100% { transform: translate(0) }
+        }
+    </style>
+</head>
+<body>
+    <div id="root" class="min-h-screen flex flex-col items-center justify-center">
+        <!-- ═══════════════════════════════════════════════════════════════
+           SOVEREIGN SEAL: 0x7cd253043254d97a732b403d54d6366bf9636194
+           STATUS: 1.21V_SYNC_GATEWAY
+           ═══════════════════════════════════════════════════════════════ -->
+        <div class="text-center p-12 border border-zinc-800 rounded-[2.5rem] bg-zinc-950 shadow-2xl shadow-[#fbbf24]/10">
+            <div class="text-[#fbbf24] text-[10px] font-black tracking-[0.6em] mb-6 uppercase">SVRN_OS_L0 // GATEWAY_ACTIVE</div>
+            
+            <h1 class="text-6xl font-black mb-8 glitch-text tracking-tighter">BD-ONE V3</h1>
+            
+            <div class="space-y-2 mb-10">
+                <p class="text-zinc-400 text-sm font-bold">시스템 정합성 체크: <span class="text-[#10b981]">PASS (1.21V)</span></p>
+                <p class="text-zinc-600 text-[10px] tracking-widest uppercase font-mono">ID: { "CHO_MINSU" } // ADDR: 0x7cd2...6194</p>
+            </div>
+
+            <div class="flex space-x-3 justify-center mb-10">
+                <div class="h-1.5 w-12 bg-[#fbbf24] rounded-full animate-pulse"></div>
+                <div class="h-1.5 w-8 bg-zinc-800 rounded-full"></div>
+                <div class="h-1.5 w-4 bg-zinc-800 rounded-full"></div>
+            </div>
+
+            <button onclick="window.location.reload()" 
+                    class="group relative px-10 py-4 bg-[#fbbf24] text-black font-black rounded-xl hover:scale-105 transition-all duration-300 overflow-hidden">
+                <span class="relative z-10">시스템 강제 동기화</span>
+                <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+            </button>
+        </div>
+
+        <footer class="absolute bottom-10 text-zinc-800 text-[9px] font-bold tracking-[1em] uppercase">
+            © 2026 Sovereign_Origin_Master_Sync
+        </footer>
+    </div>
+
+    <script type="module">
+        console.log("SVRN_OS: 1.21V_SYNC_COMPLETE // DESTINATION: 0x7cd2...6194");
+    </script>
